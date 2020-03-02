@@ -38,7 +38,7 @@ resource "Orders" do
     example "Listing orders" do
       do_request
 
-      status.should == 200
+      expect(status).to eq 200
     end
   end
 end
@@ -60,6 +60,10 @@ Consider adding a viewer to enhance the generated documentation. By itself rspec
 
     gem 'raddocs'
 
+    or 
+
+    gem 'apitome'
+
 #### spec/spec_helper.rb
 
 ```ruby
@@ -68,9 +72,106 @@ RspecApiDocumentation.configure do |config|
 end
 ```
 
+####
+For both raddocs and apitome, start rails server. Then
+
+    open http://localhost:3000/docs for raddocs
+
+    or
+
+    http://localhost:3000/api/docs for apitome
+
 ## Sample App
 
-See the `example` folder for a sample Rails app that has been documented.
+See the `example` folder for a sample Rails app that has been documented.  The sample app demonstrates the :open_api format.
+
+## Example of spec file
+
+```ruby
+  # spec/acceptance/orders_spec.rb
+  require 'rails_helper'
+  require 'rspec_api_documentation/dsl'
+  resource 'Orders' do
+    explanation "Orders resource"
+    
+    header "Content-Type", "application/json"
+
+    get '/orders' do
+      # This is manual way to describe complex parameters
+      parameter :one_level_array, type: :array, items: {type: :string, enum: ['string1', 'string2']}, default: ['string1']
+      parameter :two_level_array, type: :array, items: {type: :array, items: {type: :string}}
+      
+      let(:one_level_array) { ['string1', 'string2'] }
+      let(:two_level_array) { [['123', '234'], ['111']] }
+
+      # This is automatic way
+      # It's possible because we extract parameters definitions from the values
+      parameter :one_level_arr, with_example: true
+      parameter :two_level_arr, with_example: true
+
+      let(:one_level_arr) { ['value1', 'value2'] }
+      let(:two_level_arr) { [[5.1, 3.0], [1.0, 4.5]] }
+
+      context '200' do
+        example_request 'Getting a list of orders' do
+          expect(status).to eq(200)
+        end
+      end
+    end
+
+    put '/orders/:id' do
+
+      with_options scope: :data, with_example: true do
+        parameter :name, 'The order name', required: true
+        parameter :amount
+        parameter :description, 'The order description'
+      end
+
+      context "200" do
+        let(:id) { 1 }
+
+        example 'Update an order' do
+          request = {
+            data: {
+              name: 'order',
+              amount: 1,
+              description: 'fast order'
+            }
+          }
+          
+          # It's also possible to extract types of parameters when you pass data through `do_request` method.
+          do_request(request)
+          
+          expected_response = {
+            data: {
+              name: 'order',
+              amount: 1,
+              description: 'fast order'
+            }
+          }
+          expect(status).to eq(200)
+          expect(response_body).to eq(expected_response)
+        end
+      end
+
+      context "400" do
+        let(:id) { "a" }
+
+        example_request 'Invalid request' do
+          expect(status).to eq(400)
+        end
+      end
+      
+      context "404" do
+        let(:id) { 0 }
+        
+        example_request 'Order is not found' do
+          expect(status).to eq(404)
+        end
+      end
+    end
+  end
+```
 
 
 ## Configuration options
@@ -149,7 +250,8 @@ RspecApiDocumentation.configure do |config|
 
   # Change how the response body is formatted by default
   # Is proc that will be called with the response_content_type & response_body
-  # by default response_content_type of `application/json` are pretty formated.
+  # by default, a response body that is likely to be binary is replaced with the string
+  # "[binary data]" regardless of the media type.  Otherwise, a response_content_type of `application/json` is pretty formatted.
   config.response_body_formatter = Proc.new { |response_content_type, response_body| response_body }
 
   # Change the embedded style for HTML output. This file will not be processed by
@@ -157,6 +259,7 @@ RspecApiDocumentation.configure do |config|
   config.html_embedded_css_file = nil
 
   # Removes the DSL method `status`, this is required if you have a parameter named status
+  # In this case you can assert response status with `expect(response_status).to eq 200`
   config.disable_dsl_status!
 
   # Removes the DSL method `method`, this is required if you have a parameter named method
@@ -175,6 +278,7 @@ end
 * **markdown**: Generates an index file and example files in Markdown.
 * **api_blueprint**: Generates an index file and example files in [APIBlueprint](https://apiblueprint.org).
 * **append_json**: Lets you selectively run specs without destroying current documentation. See section below.
+* **slate**: Builds markdown files that can be used with [Slate](https://github.com/lord/slate), a beautiful static documentation builder.
 * **open_api**: Generates [OpenAPI Specification](https://github.com/OAI/OpenAPI-Specification/blob/master/versions/2.0.md) (OAS) (Current supported version is 2.0). Can be used for [Swagger-UI](https://swagger.io/tools/swagger-ui/) 
 
 ### append_json
@@ -258,7 +362,8 @@ This [format](https://github.com/OAI/OpenAPI-Specification/blob/master/versions/
     
 * Several new options on `parameter` helper.
 
-    - `with_example: true`. This option will adjust your description of the parameter with the passed value.
+    - `with_example: true`. This option will adjust your example of the parameter with the passed value.
+    - `example: <value>`. Will provide a example value for the parameter.
     - `default: <value>`. Will provide a default value for the parameter.
     - `minimum: <integer>`. Will setup upper limit for your parameter. 
     - `maximum: <integer>`. Will setup lower limit for your parameter.
@@ -306,9 +411,7 @@ paths:
       description: This description came from configuration file
       hide: true
 ```
-
-#### Example of spec file
-
+#### Example of spec file with :open_api format
 ```ruby
   resource 'Orders' do
     explanation "Orders resource"
@@ -415,18 +518,18 @@ resource "Account" do
     # default :document is :all
     example "Get a list of all accounts" do
       do_request
-      status.should == 200
+      expect(status).to eq 200
     end
 
     # Don't actually document this example, purely for testing purposes
     example "Get a list on page 2", :document => false do
       do_request(:page => 2)
-      status.should == 404
+      expect(status).to eq 404
     end
 
     # With example_request, you can't change the :document
     example_request "Get a list on page 3", :page => 3 do
-      status.should == 404
+      expect(status).to eq 404
     end
   end
 
@@ -435,12 +538,12 @@ resource "Account" do
 
     example "Creating an account", :document => :private do
       do_request(:email => "eric@example.com")
-      status.should == 201
+      expect(status).to eq 201
     end
 
     example "Creating an account - errors", :document => [:private, :developers] do
       do_request
-      status.should == 422
+      expect(status).to eq 422
     end
   end
 end
@@ -509,7 +612,7 @@ resource "Orders" do
     let(:id) { order.id }
 
     example "Get an order" do
-      path.should == "/orders/1" # `:id` is replaced with the value of `id`
+      expect(path).to eq "/orders/1" # `:id` is replaced with the value of `id`
     end
   end
 
@@ -599,7 +702,7 @@ resource "Orders" do
 
   get "/orders" do
     example_request "Headers" do
-      headers.should == { "Accept" => "application/json", "X-Custom" => "dynamic" }
+      expect(headers).to eq { "Accept" => "application/json", "X-Custom" => "dynamic" }
     end
   end
 end
@@ -638,7 +741,7 @@ resource "Orders" do
     # OR let(:order_item_item_id) { 1 }
 
     example "Creating an order" do
-      params.should eq({
+      expect(params).to eq({
         :order => {
           :name => "My Order",
           :item => {
@@ -727,7 +830,7 @@ resource "Order" do
 
       do_request
 
-      status.should == 200
+      expect(status).to eq 200
     end
   end
 end
@@ -747,7 +850,7 @@ resource "Order" do
     example "Listing orders" do
       do_request
 
-      status.should == 200
+      expect(status).to eq 200
     end
   end
 end
@@ -768,7 +871,7 @@ resource "Order" do
 
       do_request
 
-      status.should == 200
+      expect(status).to eq 200
     end
   end
 end
@@ -790,7 +893,7 @@ resource "Orders" do
 
   get "/orders" do
     example_request "Headers" do
-      headers.should == { "Accept" => "application/json" }
+      expect(headers).to eq { "Accept" => "application/json" }
     end
   end
 end
@@ -810,7 +913,7 @@ resource "Order" do
     example "Listing orders" do
       do_request
 
-      response_body.should == [{ :name => "Order 1" }].to_json
+      expect(response_body).to eq [{ :name => "Order 1" }].to_json
     end
   end
 end
@@ -826,7 +929,7 @@ resource "Order" do
     example "Listing orders" do
       do_request
 
-      response_headers["Content-Type"].should == "application/json"
+      expect(response_headers["Content-Type"]).to eq "application/json"
     end
   end
 end
@@ -842,8 +945,8 @@ resource "Order" do
     example "Listing orders" do
       do_request
 
-      status.should == 200
-      response_status.should == 200
+      expect(status).to eq 200
+      expect(response_status).to eq 200
     end
   end
 end
@@ -861,7 +964,7 @@ resource "Orders" do
 
   get "/orders" do
     example "List orders" do
-      query_string.should == "name=My+Orders"
+      expect(query_string).to eq "name=My+Orders"
     end
   end
 end

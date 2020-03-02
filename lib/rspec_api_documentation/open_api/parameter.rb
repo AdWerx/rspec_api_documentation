@@ -7,7 +7,7 @@ module RspecApiDocumentation
 
       add_setting :name, :required => true
       add_setting :in, :required => true
-      add_setting :description, :default => ''
+      add_setting :description
       add_setting :required, :default => lambda { |parameter| parameter.in.to_s == 'path' ? true : false }
       add_setting :schema
       add_setting :type
@@ -16,18 +16,9 @@ module RspecApiDocumentation
       add_setting :minimum
       add_setting :maximum
       add_setting :enum
-
-      def description_with_example
-        str = description_without_example.dup || ''
-        if with_example && value
-          str << "\n" unless str.empty?
-          str << "Eg, `#{value}`"
-        end
-        str
-      end
+      add_setting :example, :default => lambda { |parameter| parameter.with_example ? parameter.value : nil }
 
       alias_method :description_without_example, :description
-      alias_method :description, :description_with_example
     end
   end
 end

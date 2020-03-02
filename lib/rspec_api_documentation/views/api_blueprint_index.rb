@@ -8,7 +8,7 @@ module RspecApiDocumentation
 
       def sections
         super.map do |section|
-          routes = section[:examples].group_by { |e| "#{e.route_uri}#{e.route_optionals}" }.map do |route, examples|
+          routes = section[:examples].group_by { |e| "#{e.route_uri}#{e.route_optionals}#{e.route_name}" }.map do |route, examples|
             attrs  = fields(:attributes, examples)
             params = fields(:parameters, examples)
 
@@ -85,6 +85,11 @@ module RspecApiDocumentation
             else
               property[:properties_description] = nil
             end
+
+            property[:has_default?] = true if property[:default]
+            property[:has_enum?] = true if property[:enum]
+
+            property[:annotations] = property[:annotation].lines.map(&:chomp) if property[:annotation]
 
             property[:description] = nil if description_blank?(property)
             property

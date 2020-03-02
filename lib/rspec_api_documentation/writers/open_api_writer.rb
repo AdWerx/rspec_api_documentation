@@ -149,15 +149,20 @@ module RspecApiDocumentation
             opts.each { |k, v| current[:properties][field[:name]][k] = v if v }
           end
 
-          current[:required] ||= [] << field[:name] if field[:required]
+          if field[:required]
+            current[:required] ||= []
+            current[:required] << field[:name]
+          end
         end
 
         OpenApi::Schema.new(schema)
       end
 
       def extract_parameters(example)
-        extract_known_parameters(example.extended_parameters.select { |p| !p[:in].nil? }) +
-          extract_unknown_parameters(example, example.extended_parameters.select { |p| p[:in].nil? })
+        parameters = example.extended_parameters.uniq { |parameter| parameter[:name] }
+
+        extract_known_parameters(parameters.select { |p| !p[:in].nil? }) +
+          extract_unknown_parameters(example, parameters.select { |p| p[:in].nil? })
       end
 
       def extract_parameter(opts)
@@ -170,6 +175,7 @@ module RspecApiDocumentation
           value:        opts[:value],
           with_example: opts[:with_example],
           default:      opts[:default],
+          example:      opts[:example],
         ).tap do |elem|
           if elem.type == :array
             elem.items = opts[:items] || OpenApi::Helper.extract_items(opts[:value][0], { minimum: opts[:minimum], maximum: opts[:maximum], enum: opts[:enum] })
