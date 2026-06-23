@@ -8,11 +8,11 @@ module RspecApiDocumentation
 
     def call(env)
       input = env["rack.input"]
-      input.rewind
+      input.rewind unless input.nil?
 
       @request_method = env["REQUEST_METHOD"]
       @request_headers = env_to_headers(env)
-      @request_body = input.read
+      @request_body = input.nil? ? "" : input.read
 
       request_metadata = {}
 
